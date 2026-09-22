@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1f2937">
+<title>Pendataan Rambu Lalu Lintas</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#f3f4f6; color:#111827; }
+  header { background:#1f2937; color:white; padding:20px; }
+  header h1 { margin:0 0 5px; font-size:22px; }
+  header p { margin:0; opacity:.8; font-size:14px; }
+  main { max-width:900px; margin:auto; padding:16px; }
+  .card { background:white; border-radius:14px; padding:18px; margin-bottom:16px; box-shadow:0 2px 10px #00000012; }
+  label { display:block; font-weight:600; margin:12px 0 6px; }
+  input, select, textarea, button { width:100%; padding:11px; border:1px solid #d1d5db; border-radius:9px; font:inherit; }
+  textarea { min-height:80px; resize:vertical; }
+  button { cursor:pointer; border:0; background:#1f2937; color:white; font-weight:700; margin-top:10px; }
+  button.secondary { background:#6b7280; }
+  button.danger { background:#dc2626; width:auto; padding:8px 12px; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .gps { display:grid; grid-template-columns:1fr auto; gap:8px; }
+  .gps button { width:auto; margin:0; white-space:nowrap; }
+  .preview { width:100%; max-height:280px; object-fit:contain; background:#f9fafb; border-radius:10px; margin-top:10px; display:none; }
+  .item { border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin-top:12px; }
+  .item img { width:100%; max-height:220px; object-fit:cover; border-radius:8px; margin:8px 0; }
+  .meta { color:#4b5563; font-size:13px; line-height:1.6; }
+  .actions { display:flex; gap:8px; }
+  .actions button { flex:1; }
+  .empty { color:#6b7280; text-align:center; padding:20px; }
+  @media(max-width:600px){ .row {grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>🚧 Pendataan Rambu Lalu Lintas</h1>
+  <p>Catat jenis rambu, foto, koordinat GPS, tanggal, dan keterangan.</p>
+</header>
+
+<main>
+<section class="card">
+  <h2>Tambah Data</h2>
+
+  <label for="jenis">Jenis Rambu</label>
+  <select id="jenis">
+    <option value="">-- Pilih jenis --</option>
+    <option>Rambu Peringatan</option>
+    <option>Rambu Larangan</option>
+    <option>Rambu Perintah</option>
+    <option>Rambu Petunjuk</option>
+    <option>Rambu Sementara</option>
+    <option>Lainnya</option>
+  </select>
+
+  <label for="nama">Nama / Keterangan Rambu</label>
+  <input id="nama" placeholder="Contoh: Dilarang Parkir">
+
+  <div class="row">
+    <div>
+      <label for="tanggal">Tanggal</label>
+      <input id="tanggal" type="date">
+    </div>
+    <div>
+      <label for="foto">Foto Rambu</label>
+      <input id="foto" type="file" accept="image/*" capture="environment">
+    </div>
+  </div>
+
+  <img id="preview" class="preview" alt="Preview foto">
+
+  <label>Koordinat</label>
+  <div class="gps">
+    <input id="koordinat" placeholder="Latitude, Longitude">
+    <button type="button" onclick="ambilGPS()">📍 Ambil GPS</button>
+  </div>
+
+  <label for="catatan">Catatan</label>
+  <textarea id="catatan" placeholder="Kondisi rambu, lokasi, kerusakan, dll."></textarea>
+
+  <button onclick="simpan()">💾 Simpan Data</button>
+</section>
+
+<section class="card">
+  <div class="actions">
+    <button onclick="exportCSV()">⬇️ Export CSV</button>
+    <button class="secondary" onclick="hapusSemua()">🗑️ Hapus Semua</button>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Data Tersimpan</h2>
+  <div id="daftar"></div>
+</section>
+</main>
+
+<script>
+const KEY = "data_rambu_lalu_lintas_v1";
+let fotoData = "";
+
+document.getElementById("tanggal").value = new Date().toISOString().slice(0,10);
+
+document.getElementById("foto").addEventListener("change", function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    fotoData = reader.result;
+    const preview = document.getElementById("preview");
+    preview.src = fotoData;
+    preview.style.display = "block";
+  };
+  reader.readAsDataURL(file);
+});
+
+function ambilGPS() {
+  if (!navigator.geolocation) {
+    alert("Browser ini tidak mendukung GPS.");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat = pos.coords.latitude.toFixed(6);
+      const lon = pos.coords.longitude.toFixed(6);
+      document.getElementById("koordinat").value = `${lat}, ${lon}`;
+    },
+    err => alert("GPS gagal diambil. Pastikan izin lokasi diberikan.\nKode: " + err.code),
+    { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
+  );
+}
+
+function ambilData() {
+  return JSON.parse(localStorage.getItem(KEY) || "[]");
+}
+
+function simpan() {
+  const jenis = document.getElementById("jenis").value;
+  const nama = document.getElementById("nama").value.trim();
+  const tanggal = document.getElementById("tanggal").value;
+  const koordinat = document.getElementById("koordinat").value.trim();
+  const catatan = document.getElementById("catatan").value.trim();
+
+  if (!jenis || !nama || !tanggal || !koordinat) {
+    alert("Lengkapi jenis rambu, nama, tanggal, dan koordinat.");
+    return;
+  }
+
+  const data = ambilData();
+  data.unshift({
+    id: Date.now(),
+    jenis, nama, tanggal, koordinat, catatan,
+    foto: fotoData
+  });
+
+  try {
+    localStorage.setItem(KEY, JSON.stringify(data));
+  } catch(e) {
+    alert("Penyimpanan penuh. Foto mungkin terlalu besar. Coba gunakan foto yang lebih kecil.");
+    return;
+  }
+
+  document.getElementById("nama").value = "";
+  document.getElementById("koordinat").value = "";
+  document.getElementById("catatan").value = "";
+  document.getElementById("foto").value = "";
+  document.getElementById("preview").style.display = "none";
+  fotoData = "";
+  render();
+}
+
+function hapus(id) {
+  if (!confirm("Hapus data ini?")) return;
+  const data = ambilData().filter(x => x.id !== id);
+  localStorage.setItem(KEY, JSON.stringify(data));
+  render();
+}
+
+function hapusSemua() {
+  if (!confirm("Hapus SEMUA data?")) return;
+  localStorage.removeItem(KEY);
+  render();
+}
+
+function bukaMaps(koordinat) {
+  const [lat, lon] = koordinat.split(",").map(x => x.trim());
+  if (!lat || !lon) return;
+  window.open(`https://www.google.com/maps?q=${lat},${lon}`, "_blank");
+}
+
+function render() {
+  const el = document.getElementById("daftar");
+  const data = ambilData();
+
+  if (!data.length) {
+    el.innerHTML = '<div class="empty">Belum ada data. Silakan data rambu pertama sebelum umat manusia lupa lagi. 🗿</div>';
+    return;
+  }
+
+  el.innerHTML = data.map(x => `
+    <div class="item">
+      <strong>${esc(x.nama)}</strong>
+      <div class="meta">
+        Jenis: ${esc(x.jenis)}<br>
+        Tanggal: ${esc(x.tanggal)}<br>
+        Koordinat: ${esc(x.koordinat)}
+      </div>
+      ${x.foto ? `<img src="${x.foto}" alt="Foto rambu">` : ""}
+      ${x.catatan ? `<div class="meta"><b>Catatan:</b> ${esc(x.catatan)}</div>` : ""}
+      <div class="actions">
+        <button onclick="bukaMaps('${escAttr(x.koordinat)}')">🗺️ Buka Maps</button>
+        <button class="danger" onclick="hapus(${x.id})">Hapus</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[c]));
+}
+function escAttr(s) {
+  return String(s).replace(/'/g, "\\'");
+}
+
+function exportCSV() {
+  const data = ambilData();
+  if (!data.length) {
+    alert("Belum ada data untuk diekspor.");
+    return;
+  }
+
+  const rows = [
+    ["Nama Rambu","Jenis","Tanggal","Koordinat","Catatan","Foto"],
+    ...data.map(x => [x.nama,x.jenis,x.tanggal,x.koordinat,x.catatan,x.foto ? "Ada" : "Tidak ada"])
+  ];
+
+  const csv = rows.map(row =>
+    row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")
+  ).join("\n");
+
+  const blob = new Blob(["\ufeff" + csv], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "data_rambu_lalu_lintas.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+render();
+</script>
+</body>
+</html>
